@@ -35,9 +35,8 @@ multi_labeled_count = (
     .sum()
 )
 
-col1, col2, col3 = st.columns(3)
+col1, col3 = st.columns(2)
 col1.metric("Total Labels", total_labels)
-col2.metric("Unique Images", unique_images)
 col3.metric("Images labeled by ≥2 users", multi_labeled_count)
 
 st.divider()
