@@ -77,17 +77,28 @@ st.subheader("📈 Labeling Progress Over Time")
 # Timestamp in datetime konvertieren
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
+# Prüfen, ob tz-naive oder tz-aware
+if df["timestamp"].dt.tz is None:
+    # tz-naive → als UTC markieren
+    df["timestamp"] = df["timestamp"].dt.tz_localize('UTC')
+
+# In deutsche Zeit konvertieren
+df["timestamp"] = df["timestamp"].dt.tz_convert('Europe/Berlin')
+
 # Nach Minute gruppieren
 df_time = df.groupby(df["timestamp"].dt.floor("min")).size().reset_index(name="count")
-
-# Nur gültige Timestamps
 df_time = df_time.dropna(subset=["timestamp"])
-
-# Index setzen
 df_time.set_index("timestamp", inplace=True)
+
+# Zeitreihe bis jetzt auffüllen
+tz_berlin = pytz.timezone("Europe/Berlin")
+start = df_time.index.min()
+end = pd.Timestamp.now(tz=tz_berlin).floor('min')
+full_index = pd.date_range(start=start, end=end, freq='T')
+df_time = df_time.reindex(full_index, fill_value=0)
 
 # Gleitender Mittelwert (z.B. 5 Minuten Fenster)
 df_time["count_smoothed"] = df_time["count"].rolling(window=5, min_periods=1).mean()
 
-# Line chart mit geglätteten Werten
+# Chart
 st.line_chart(df_time["count_smoothed"])
