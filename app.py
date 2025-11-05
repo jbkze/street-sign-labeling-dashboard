@@ -72,7 +72,7 @@ top_labels = top_labels.sort_values("count", ascending=False)
 st.bar_chart(top_labels.set_index("label")["count"], horizontal=True, sort=False)
 
 # ---------------- LABELING OVER TIME ----------------
-st.subheader("📈 Labeling Progress Over Time (cumulative)")
+st.subheader("📈 Labeling Progress Over Time")
 
 # Timestamp in datetime konvertieren
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
