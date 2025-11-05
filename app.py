@@ -72,33 +72,22 @@ top_labels = top_labels.sort_values("count", ascending=False)
 st.bar_chart(top_labels.set_index("label")["count"], horizontal=True, sort=False)
 
 # ---------------- LABELING OVER TIME ----------------
-st.subheader("📈 Labeling Progress Over Time")
+st.subheader("📈 Labeling Progress Over Time (cumulative)")
 
 # Timestamp in datetime konvertieren
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
 # Prüfen, ob tz-naive oder tz-aware
 if df["timestamp"].dt.tz is None:
-    # tz-naive → als UTC markieren
     df["timestamp"] = df["timestamp"].dt.tz_localize('UTC')
 
-# In deutsche Zeit konvertieren
 df["timestamp"] = df["timestamp"].dt.tz_convert('Europe/Berlin')
 
-# Nach Minute gruppieren
-df_time = df.groupby(df["timestamp"].dt.floor("min")).size().reset_index(name="count")
-df_time = df_time.dropna(subset=["timestamp"])
-df_time.set_index("timestamp", inplace=True)
+# Nach Timestamp sortieren
+df_sorted = df.sort_values("timestamp")
 
-# Zeitreihe bis jetzt auffüllen
-tz_berlin = pytz.timezone("Europe/Berlin")
-start = df_time.index.min()
-end = pd.Timestamp.now(tz=tz_berlin).floor('min')
-full_index = pd.date_range(start=start, end=end, freq='T')
-df_time = df_time.reindex(full_index, fill_value=0)
+# Kumulativer Zähler
+df_sorted["cumulative_count"] = range(1, len(df_sorted) + 1)
 
-# Gleitender Mittelwert (z.B. 5 Minuten Fenster)
-df_time["count_smoothed"] = df_time["count"].rolling(window=5, min_periods=1).mean()
-
-# Chart
-st.line_chart(df_time["count_smoothed"])
+# Line chart
+st.line_chart(df_sorted.set_index("timestamp")["cumulative_count"])
