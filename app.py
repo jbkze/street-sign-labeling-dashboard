@@ -1,24 +1,47 @@
 import streamlit as st
 from supabase import create_client
 import pandas as pd
-import pytz
+import time
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Labeling Dashboard")
 
 SUPABASE_URL = st.secrets["connections"]["supabase"]["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["connections"]["supabase"]["SUPABASE_KEY"]
-TABLE_NAME = "labels"  # Deine Tabelle
+TABLE_NAME = "labels"
+PAGE_SIZE = 1000  # Supabase max rows per query
 
 # ---------------- CONNECT ----------------
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-@st.cache_data(ttl=300)
-def load_data():
-    data = supabase.table(TABLE_NAME).select("*").execute()
-    return pd.DataFrame(data.data)
 
-df = load_data()
+# ---------------- LOAD ALL DATA WITH PAGINATION + STATUS ----------------
+def load_all_data():
+    # Gesamtzahl holen
+    res = supabase.table(TABLE_NAME).select("id", count="exact").limit(1).execute()
+    total_count = res.count or 0
+
+    all_rows = []
+    progress_text = "📦 Lade Daten aus Supabase..."
+    progress_bar = st.progress(0, text=progress_text)
+
+    for offset in range(0, total_count, PAGE_SIZE):
+        start = offset
+        end = offset + PAGE_SIZE - 1
+        response = supabase.table(TABLE_NAME).select("*").range(start, end).execute()
+        rows = response.data or []
+        all_rows.extend(rows)
+        time.sleep(0.05)  # minimale Pause, um API nicht zu überlasten
+
+        progress = min(len(all_rows) / total_count, 1.0)
+        progress_bar.progress(progress, text=f"{progress_text} ({len(all_rows)}/{total_count})")
+
+    progress_bar.empty()  # entfernt die Progressbar nach Abschluss
+    return pd.DataFrame(all_rows)
+
+
+# ---------------- FETCH ----------------
+df = load_all_data()
 
 if df.empty:
     st.warning("Keine Daten gefunden.")
@@ -27,12 +50,8 @@ if df.empty:
 # ---------------- METRICS ----------------
 total_labels = len(df)
 unique_images = df["image"].nunique()
-
 multi_labeled_count = (
-    df.groupby("image")["user"]
-    .nunique()
-    .ge(2)
-    .sum()
+    df.groupby("image")["user"].nunique().ge(2).sum()
 )
 
 col1, col2, col3 = st.columns(3)
@@ -44,50 +63,25 @@ st.divider()
 
 # ---------------- TOP 10 CONTRIBUTORS ----------------
 st.subheader("🏅 Top 10 Contributors")
-
-# Top 10 Users mit Anzahl Labels
 top_users = df["user"].value_counts().head(10).reset_index()
 top_users.columns = ["user", "label_count"]
-
-# Sortieren nach label_count absteigend
-top_users = top_users.sort_values("label_count", ascending=False)
-
-# Streamlit Bar Chart
 st.bar_chart(top_users.set_index("user")["label_count"], horizontal=True, sort=False)
 
 # ---------------- MOST FREQUENT LABELS ----------------
 st.subheader("🏷️ Most Selected Labels")
-
-# Explodiere die Arrays in einzelne Labels
 df_exploded = df.explode("label")
-
-# Zähle die Häufigkeit jedes einzelnen Labels
 top_labels = df_exploded["label"].value_counts().head(10).reset_index()
 top_labels.columns = ["label", "count"]
-
-# Sortieren absteigend (optional, aber st.bar_chart zeigt Index)
-top_labels = top_labels.sort_values("count", ascending=False)
-
-# Bar Chart
 st.bar_chart(top_labels.set_index("label")["count"], horizontal=True, sort=False)
 
 # ---------------- LABELING OVER TIME ----------------
 st.subheader("📈 Labeling Progress Over Time")
-
-# Timestamp in datetime konvertieren
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
-# Prüfen, ob tz-naive oder tz-aware
 if df["timestamp"].dt.tz is None:
     df["timestamp"] = df["timestamp"].dt.tz_localize('UTC')
 
 df["timestamp"] = df["timestamp"].dt.tz_convert('Europe/Berlin')
-
-# Nach Timestamp sortieren
 df_sorted = df.sort_values("timestamp")
-
-# Kumulativer Zähler
 df_sorted["cumulative_count"] = range(1, len(df_sorted) + 1)
-
-# Line chart
 st.line_chart(df_sorted.set_index("timestamp")["cumulative_count"])
