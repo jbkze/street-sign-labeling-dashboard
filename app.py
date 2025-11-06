@@ -54,9 +54,13 @@ multi_labeled_count = (
     df.groupby("image")["user"].nunique().ge(2).sum()
 )
 
+at_least_single_labeled_count = (
+    df.groupby("image")["user"].nunique().ge(1).sum()
+)
+
 col1, col2, col3 = st.columns(3)
-col1.metric("Progress", f'{int(total_labels / 7656 * 100)} %')
-col2.metric("Total Labels", total_labels)
+col1.metric("Progress", f'{int(at_least_single_labeled_count / 7656 * 100)} %')
+col2.metric("Images labeled by ≥1 users", at_least_single_labeled_count)
 col3.metric("Images labeled by ≥2 users", multi_labeled_count)
 
 st.divider()
