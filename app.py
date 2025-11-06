@@ -89,3 +89,44 @@ df["timestamp"] = df["timestamp"].dt.tz_convert('Europe/Berlin')
 df_sorted = df.sort_values("timestamp")
 df_sorted["cumulative_count"] = range(1, len(df_sorted) + 1)
 st.line_chart(df_sorted.set_index("timestamp")["cumulative_count"])
+
+# ---------------- LABEL CO-OCCURRENCE ----------------
+st.subheader("🔥 Label Co-Occurrence")
+
+import ast
+from itertools import combinations
+import plotly.express as px
+
+# Explodierte Labels liegen bereits als Listen vor, ggf. sicherstellen
+df['label'] = df['label'].apply(lambda x: x if isinstance(x, list) else ast.literal_eval(x))
+
+# Alle möglichen Labels
+all_labels = df_exploded['label'].unique()
+co_matrix = pd.DataFrame(0, index=all_labels, columns=all_labels)
+
+# Co-Occurrence zählen
+for labels in df['label']:
+    for a, b in combinations(labels, 2):
+        co_matrix.loc[a, b] += 1
+        co_matrix.loc[b, a] += 1  # symmetrisch
+# Diagonale = Gesamtanzahl eines Labels
+for label in all_labels:
+    co_matrix.loc[label, label] = df_exploded['label'].value_counts().get(label, 0)
+
+# Plotly Heatmap
+fig = px.imshow(
+    co_matrix.values,
+    x=co_matrix.columns,
+    y=co_matrix.index,
+    text_auto=True,
+    color_continuous_scale='deep'  # <-- rot-gelb
+)
+fig.update_layout(
+    xaxis_title="Label",
+    yaxis_title="Label",
+    xaxis_side="top",
+    width=700,
+    height=700
+)
+
+st.plotly_chart(fig, use_container_width=True)
