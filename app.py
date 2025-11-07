@@ -47,6 +47,10 @@ if df.empty:
     st.warning("Keine Daten gefunden.")
     st.stop()
 
+# Explodiere für Co-Occurrence-Berechnung
+df_exploded = df.explode("label")
+
+
 # ---------------- METRICS ----------------
 total_labels = len(df)
 unique_images = df["image"].nunique()
@@ -73,10 +77,38 @@ st.bar_chart(top_users.set_index("user")["label_count"], horizontal=True, sort=F
 
 # ---------------- MOST FREQUENT LABELS ----------------
 st.subheader("🏷️ Most Selected Labels")
-df_exploded = df.explode("label")
-top_labels = df_exploded["label"].value_counts().head(20).reset_index()
-top_labels.columns = ["label", "count"]
-st.bar_chart(top_labels.set_index("label")["count"], horizontal=True, sort=False)
+
+# --- Dropdown für Userauswahl ---
+users = sorted(df["user"].dropna().unique())
+selected_user = st.selectbox("👤 Select User", options=["All"] + users, index=0)
+
+# --- Explode alle Labels für All ---
+df_exploded_all = df.explode("label")
+all_counts = df_exploded_all["label"].value_counts().reset_index()
+all_counts.columns = ["label", "count_all"]
+
+# --- Explode + Filter für User ---
+if selected_user != "All":
+    df_filtered = df[df["user"] == selected_user].explode("label")
+    user_counts = df_filtered["label"].value_counts().reset_index()
+    user_counts.columns = ["label", "count_user"]
+else:
+    user_counts = all_counts.rename(columns={"count_all": "count_user"})
+
+# --- Merge, nur für User-Balken ---
+merged = pd.merge(all_counts, user_counts, on="label", how="left").fillna(0)
+
+# --- Sortieren nach All-Wert ---
+merged = merged.sort_values("count_all", ascending=False)
+
+# --- Plot ---
+st.bar_chart(
+    merged.set_index("label")["count_user"],
+    horizontal=True,
+    use_container_width=True,
+    sort=False
+)
+
 
 # ---------------- LABELING OVER TIME ----------------
 st.subheader("📈 Labeling Progress Over Time")
@@ -130,6 +162,53 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+
+from sklearn.decomposition import PCA
+import plotly.express as px
+
+st.subheader("🌀 User Similarity Map (PCA)")
+
+# --- User × Label Matrix (Counts) ---
+user_label = (
+    df.explode("label")
+    .groupby(["user", "label"])
+    .size()
+    .unstack(fill_value=0)
+)
+
+if len(user_label) < 2:
+    st.info("Nicht genug User für PCA.")
+else:
+    # --- Normiere jede Zeile auf relative Häufigkeiten ---
+    user_label_rel = user_label.div(user_label.sum(axis=1), axis=0).fillna(0)
+
+    # --- PCA ---
+    pca = PCA(n_components=2)
+    coords = pca.fit_transform(user_label_rel)
+
+    # --- DataFrame mit Koordinaten + Varianzanteil ---
+    df_pca = pd.DataFrame(coords, columns=["PC1", "PC2"], index=user_label_rel.index).reset_index()
+    explained = pca.explained_variance_ratio_ * 100
+
+    # --- Interaktiver Plot ---
+    fig = px.scatter(
+        df_pca,
+        x="PC1", y="PC2",
+        text="user",
+        title=f"User Clustering by Relative Label Patterns (PCA) — "
+              f"{explained[0]:.1f}% / {explained[1]:.1f}%",
+    )
+    fig.update_traces(textposition="top center", marker=dict(size=10, opacity=0.8))
+    fig.update_layout(
+        xaxis_title=f"PC1 ({explained[0]:.1f}% Var.)",
+        yaxis_title=f"PC2 ({explained[1]:.1f}% Var.)",
+        height=600
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 
 # ---------------- AGREEMENT BETWEEN TWO LABELERS ----------------
 st.subheader("👥 Label Agreement")
