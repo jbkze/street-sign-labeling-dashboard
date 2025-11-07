@@ -132,7 +132,7 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- AGREEMENT BETWEEN TWO LABELERS ----------------
-st.subheader("👥 Label Agreement (Images with Exactly Two Annotators)")
+st.subheader("👥 Label Agreement")
 
 import ast
 import numpy as np
