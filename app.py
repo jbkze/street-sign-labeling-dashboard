@@ -130,3 +130,103 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- AGREEMENT BETWEEN TWO LABELERS ----------------
+st.subheader("👥 Label Agreement (Images with Exactly Two Annotators)")
+
+import ast
+import numpy as np
+import plotly.express as px
+
+# --- Helper to clean label field ---
+def ensure_list(x):
+    if isinstance(x, str):
+        try:
+            x = ast.literal_eval(x)
+        except Exception:
+            return []
+    if not isinstance(x, list):
+        return []
+    flat = []
+    for item in x:
+        if isinstance(item, list):
+            flat.extend(item)
+        else:
+            flat.append(item)
+    return flat
+
+df["label"] = df["label"].apply(ensure_list)
+
+# --- Select images with exactly two annotators ---
+multi_two = df.groupby("image").filter(lambda g: g["user"].nunique() == 2)
+
+# --- Compute agreement (Jaccard index) ---
+agreement = []
+for image, group in multi_two.groupby("image"):
+    if len(group) == 2:
+        labels_a = set(group.iloc[0]["label"])
+        labels_b = set(group.iloc[1]["label"])
+        intersection = len(labels_a & labels_b)
+        union = len(labels_a | labels_b)
+        jaccard = intersection / union if union > 0 else np.nan
+        agreement.append({
+            "image": image,
+            "user_a": group.iloc[0]["user"],
+            "user_b": group.iloc[1]["user"],
+            "labels_a": labels_a,
+            "labels_b": labels_b,
+            "common_labels": list(labels_a & labels_b),
+            "jaccard": jaccard,
+            "n_labels_a": len(labels_a),
+            "n_labels_b": len(labels_b)
+        })
+
+agreement_df = pd.DataFrame(agreement).dropna(subset=["jaccard"])
+
+if agreement_df.empty:
+    st.info("Keine Bilder mit genau zwei Annotatoren gefunden.")
+else:
+    # --- KPI ---
+    mean_jaccard = agreement_df["jaccard"].mean()
+    median_jaccard = agreement_df["jaccard"].median()
+    st.metric("Ø Agreement (Jaccard)", f"{mean_jaccard:.2f}")
+    st.metric("Median Agreement", f"{median_jaccard:.2f}")
+
+    # --- Distribution Plot ---
+    fig = px.histogram(
+        agreement_df,
+        x="jaccard",
+        nbins=20,
+        color_discrete_sequence=["#F1C232"],
+        title="Distribution of Annotator Agreement (Jaccard Index)",
+    )
+    fig.update_layout(
+        xaxis_title="Jaccard Index (0 = no overlap, 1 = identical)",
+        yaxis_title="Number of Images",
+        bargap=0.1,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+# --- AWS URL Prefix ---
+AWS_URL = "https://d3b45akprxecp4.cloudfront.net/GTSD-220-test/"
+
+# --- Optional table for low-agreement cases ---
+low_agreement = agreement_df.sort_values("jaccard")
+
+with st.expander("📉 Lowest Agreement Examples"):
+    # Bild-URL-Spalte hinzufügen
+    low_agreement["image_url"] = AWS_URL + low_agreement["image"]
+
+    def fmt_labels(labels):
+        if not labels:
+            return "–"
+        return ", ".join(sorted(labels))
+
+    for _, row in low_agreement.iterrows():
+        st.markdown(f"**Image:** `{row['image']}` — **Jaccard:** {row['jaccard']:.2f}")
+        st.image(AWS_URL + row["image"], width=250)
+        st.markdown(
+            f"👤 **{row['user_a']}** labels: `{fmt_labels(row['labels_a'])}`  \n"
+            f"👤 **{row['user_b']}** labels: `{fmt_labels(row['labels_b'])}`  \n"
+        )
+        st.divider()
