@@ -66,8 +66,8 @@ col3.metric("Images labeled by ≥2 users", multi_labeled_count)
 st.divider()
 
 # ---------------- TOP 10 CONTRIBUTORS ----------------
-st.subheader("🏅 Top 20 Contributors")
-top_users = df["user"].value_counts().head(20).reset_index()
+st.subheader("🏅 Top Contributors")
+top_users = df["user"].value_counts().reset_index()
 top_users.columns = ["user", "label_count"]
 st.bar_chart(top_users.set_index("user")["label_count"], horizontal=True, sort=False)
 
