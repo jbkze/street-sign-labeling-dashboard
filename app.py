@@ -129,29 +129,42 @@ import ast
 from itertools import combinations
 import plotly.express as px
 
-# Explodierte Labels liegen bereits als Listen vor, ggf. sicherstellen
+# Sicherstellen, dass Labels Listen sind
 df['label'] = df['label'].apply(lambda x: x if isinstance(x, list) else ast.literal_eval(x))
+
+# Explodierte Labels (falls nicht schon vorhanden)
+df_exploded = df.explode('label')
 
 # Alle möglichen Labels
 all_labels = df_exploded['label'].unique()
-co_matrix = pd.DataFrame(0, index=all_labels, columns=all_labels)
+co_matrix = pd.DataFrame(0, index=all_labels, columns=all_labels, dtype=float)
 
 # Co-Occurrence zählen
 for labels in df['label']:
     for a, b in combinations(labels, 2):
         co_matrix.loc[a, b] += 1
         co_matrix.loc[b, a] += 1  # symmetrisch
-# Diagonale = Gesamtanzahl eines Labels
-for label in all_labels:
-    co_matrix.loc[label, label] = df_exploded['label'].value_counts().get(label, 0)
 
-# Plotly Heatmap
+# Diagonale = Gesamtanzahl des Labels
+label_counts = df_exploded['label'].value_counts()
+for label, count in label_counts.items():
+    co_matrix.loc[label, label] = count
+
+# --- Normalisierung ---
+norm_matrix = co_matrix.copy()
+for label in all_labels:
+    if co_matrix.loc[label, label] > 0:
+        norm_matrix.loc[label] = co_matrix.loc[label] / co_matrix.loc[label, label]
+
+# Plotly Heatmap (normalisiert)
 fig = px.imshow(
-    co_matrix.values,
-    x=co_matrix.columns,
-    y=co_matrix.index,
-    text_auto=True,
-    color_continuous_scale='deep'  # <-- rot-gelb
+    norm_matrix.values,
+    x=norm_matrix.columns,
+    y=norm_matrix.index,
+    text_auto=".2f",
+    color_continuous_scale="deep",
+    zmin=0,
+    zmax=1
 )
 fig.update_layout(
     xaxis_title="Label",
@@ -176,6 +189,9 @@ user_label = (
     .size()
     .unstack(fill_value=0)
 )
+
+# Nur User mit mehr als 10 vergebenen Labels behalten
+user_label = user_label[user_label.sum(axis=1) > 0]
 
 if len(user_label) < 2:
     st.info("Nicht genug User für PCA.")
