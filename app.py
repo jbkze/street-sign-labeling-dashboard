@@ -39,6 +39,27 @@ def load_all_data():
     progress_bar.empty()  # entfernt die Progressbar nach Abschluss
     return pd.DataFrame(all_rows)
 
+def ensure_list(x):
+    """
+    Stellt sicher, dass label ein flaches List-Objekt ist.
+    Ein leeres Array [] bedeutet "okay" (kein Defekt) → wird zu ['okay'].
+    """
+    if isinstance(x, str):
+        try:
+            x = ast.literal_eval(x)
+        except Exception:
+            x = []
+    if not isinstance(x, list):
+        x = []
+    flat = []
+    for item in x:
+        if isinstance(item, list):
+            flat.extend(item)
+        else:
+            flat.append(item)
+    if not flat:
+        flat = ["no_defect"]  # explizit als Label für "kein Defekt"
+    return flat
 
 # ---------------- FETCH ----------------
 df = load_all_data()
@@ -46,6 +67,8 @@ df = load_all_data()
 if df.empty:
     st.warning("Keine Daten gefunden.")
     st.stop()
+
+df["label"] = df["label"].apply(ensure_list)
 
 # Explodiere für Co-Occurrence-Berechnung
 df_exploded = df.explode("label")
@@ -313,7 +336,7 @@ with st.expander("📉 Lowest Agreement Examples"):
     low_agreement["image_url"] = AWS_URL + low_agreement["image"]
 
     def fmt_labels(labels):
-        if not labels:
+        if "no_defect" in labels:
             return "–"
         return ", ".join(sorted(labels))
 
