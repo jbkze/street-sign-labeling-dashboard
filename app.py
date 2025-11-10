@@ -34,10 +34,13 @@ def load_all_data():
         time.sleep(0.05)  # minimale Pause, um API nicht zu überlasten
 
         progress = min(len(all_rows) / total_count, 1.0)
-        progress_bar.progress(progress, text=f"{progress_text} ({len(all_rows)}/{total_count})")
+        progress_bar.progress(
+            progress, text=f"{progress_text} ({len(all_rows)}/{total_count})"
+        )
 
     progress_bar.empty()  # entfernt die Progressbar nach Abschluss
     return pd.DataFrame(all_rows)
+
 
 def ensure_list(x):
     """
@@ -61,6 +64,7 @@ def ensure_list(x):
         flat = ["no_defect"]  # explizit als Label für "kein Defekt"
     return flat
 
+
 # ---------------- FETCH ----------------
 df = load_all_data()
 
@@ -77,16 +81,12 @@ df_exploded = df.explode("label")
 # ---------------- METRICS ----------------
 total_labels = len(df)
 unique_images = df["image"].nunique()
-multi_labeled_count = (
-    df.groupby("image")["user"].nunique().ge(2).sum()
-)
+multi_labeled_count = df.groupby("image")["user"].nunique().ge(2).sum()
 
-at_least_single_labeled_count = (
-    df.groupby("image")["user"].nunique().ge(1).sum()
-)
+at_least_single_labeled_count = df.groupby("image")["user"].nunique().ge(1).sum()
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Progress", f'{int(at_least_single_labeled_count / 7656 * 100)} %')
+col1.metric("Progress", f"{int(at_least_single_labeled_count / 7656 * 100)} %")
 col2.metric("Images labeled by ≥1 users", at_least_single_labeled_count)
 col3.metric("Images labeled by ≥2 users", multi_labeled_count)
 
@@ -129,7 +129,7 @@ st.bar_chart(
     merged.set_index("label")["count_user"],
     horizontal=True,
     use_container_width=True,
-    sort=False
+    sort=False,
 )
 
 
@@ -138,9 +138,9 @@ st.subheader("📈 Labeling Progress Over Time")
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
 if df["timestamp"].dt.tz is None:
-    df["timestamp"] = df["timestamp"].dt.tz_localize('UTC')
+    df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
 
-df["timestamp"] = df["timestamp"].dt.tz_convert('Europe/Berlin')
+df["timestamp"] = df["timestamp"].dt.tz_convert("Europe/Berlin")
 df_sorted = df.sort_values("timestamp")
 df_sorted["cumulative_count"] = range(1, len(df_sorted) + 1)
 st.line_chart(df_sorted.set_index("timestamp")["cumulative_count"])
@@ -153,23 +153,25 @@ from itertools import combinations
 import plotly.express as px
 
 # Sicherstellen, dass Labels Listen sind
-df['label'] = df['label'].apply(lambda x: x if isinstance(x, list) else ast.literal_eval(x))
+df["label"] = df["label"].apply(
+    lambda x: x if isinstance(x, list) else ast.literal_eval(x)
+)
 
 # Explodierte Labels (falls nicht schon vorhanden)
-df_exploded = df.explode('label')
+df_exploded = df.explode("label")
 
 # Alle möglichen Labels
-all_labels = df_exploded['label'].unique()
+all_labels = df_exploded["label"].unique()
 co_matrix = pd.DataFrame(0, index=all_labels, columns=all_labels, dtype=float)
 
 # Co-Occurrence zählen
-for labels in df['label']:
+for labels in df["label"]:
     for a, b in combinations(labels, 2):
         co_matrix.loc[a, b] += 1
         co_matrix.loc[b, a] += 1  # symmetrisch
 
 # Diagonale = Gesamtanzahl des Labels
-label_counts = df_exploded['label'].value_counts()
+label_counts = df_exploded["label"].value_counts()
 for label, count in label_counts.items():
     co_matrix.loc[label, label] = count
 
@@ -187,14 +189,10 @@ fig = px.imshow(
     text_auto=".2f",
     color_continuous_scale="deep",
     zmin=0,
-    zmax=1
+    zmax=1,
 )
 fig.update_layout(
-    xaxis_title="Label",
-    yaxis_title="Label",
-    xaxis_side="top",
-    width=700,
-    height=700
+    xaxis_title="Label", yaxis_title="Label", xaxis_side="top", width=700, height=700
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -206,15 +204,10 @@ import plotly.express as px
 st.subheader("🌀 User Similarity Map (PCA)")
 
 # --- User × Label Matrix (Counts) ---
-user_label = (
-    df.explode("label")
-    .groupby(["user", "label"])
-    .size()
-    .unstack(fill_value=0)
-)
+user_label = df.explode("label").groupby(["user", "label"]).size().unstack(fill_value=0)
 
 # Nur User mit mehr als 10 vergebenen Labels behalten
-user_label = user_label[user_label.sum(axis=1) > 0]
+user_label = user_label[user_label.sum(axis=1) > 10]
 
 if len(user_label) < 2:
     st.info("Nicht genug User für PCA.")
@@ -227,26 +220,39 @@ else:
     coords = pca.fit_transform(user_label_rel)
 
     # --- DataFrame mit Koordinaten + Varianzanteil ---
-    df_pca = pd.DataFrame(coords, columns=["PC1", "PC2"], index=user_label_rel.index).reset_index()
+    df_pca = pd.DataFrame(
+        coords, columns=["PC1", "PC2"], index=user_label_rel.index
+    ).reset_index()
+    df_pca["total_labels"] = user_label.sum(
+        axis=1
+    ).values  # user_label ist User × Label Matrix
+
     explained = pca.explained_variance_ratio_ * 100
 
     # --- Interaktiver Plot ---
     fig = px.scatter(
         df_pca,
-        x="PC1", y="PC2",
+        x="PC1",
+        y="PC2",
         text="user",
-        title=f"User Clustering by Relative Label Patterns (PCA) — "
-              f"{explained[0]:.1f}% / {explained[1]:.1f}%",
+        title=f"User Clustering by Relative Label Patterns (PCA)",
+        template="plotly_white",
+        color_continuous_scale="Plasma_r",
+        color="total_labels",
+        size="total_labels",  # Farbskala nach Labelanzahl
+        size_max=30,
     )
-    fig.update_traces(textposition="top center", marker=dict(size=10, opacity=0.8))
+    fig.update_traces(
+        textposition="top center",
+        textfont=dict(color="gray"),
+    )
     fig.update_layout(
         xaxis_title=f"PC1 ({explained[0]:.1f}% Var.)",
         yaxis_title=f"PC2 ({explained[1]:.1f}% Var.)",
-        height=600
+        height=600,
     )
 
     st.plotly_chart(fig, use_container_width=True)
-
 
 
 # ---------------- AGREEMENT BETWEEN TWO LABELERS ----------------
@@ -255,6 +261,7 @@ st.subheader("👥 Label Agreement")
 import ast
 import numpy as np
 import plotly.express as px
+
 
 # --- Helper to clean label field ---
 def ensure_list(x):
@@ -273,6 +280,7 @@ def ensure_list(x):
             flat.append(item)
     return flat
 
+
 df["label"] = df["label"].apply(ensure_list)
 
 # --- Select images with exactly two annotators ---
@@ -287,17 +295,19 @@ for image, group in multi_two.groupby("image"):
         intersection = len(labels_a & labels_b)
         union = len(labels_a | labels_b)
         jaccard = intersection / union if union > 0 else np.nan
-        agreement.append({
-            "image": image,
-            "user_a": group.iloc[0]["user"],
-            "user_b": group.iloc[1]["user"],
-            "labels_a": labels_a,
-            "labels_b": labels_b,
-            "common_labels": list(labels_a & labels_b),
-            "jaccard": jaccard,
-            "n_labels_a": len(labels_a),
-            "n_labels_b": len(labels_b)
-        })
+        agreement.append(
+            {
+                "image": image,
+                "user_a": group.iloc[0]["user"],
+                "user_b": group.iloc[1]["user"],
+                "labels_a": labels_a,
+                "labels_b": labels_b,
+                "common_labels": list(labels_a & labels_b),
+                "jaccard": jaccard,
+                "n_labels_a": len(labels_a),
+                "n_labels_b": len(labels_b),
+            }
+        )
 
 agreement_df = pd.DataFrame(agreement).dropna(subset=["jaccard"])
 
