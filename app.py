@@ -1,7 +1,8 @@
+import time
+
+import pandas as pd
 import streamlit as st
 from supabase import create_client
-import pandas as pd
-import time
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Labeling Dashboard")
@@ -128,7 +129,7 @@ merged = merged.sort_values("count_all", ascending=False)
 st.bar_chart(
     merged.set_index("label")["count_user"],
     horizontal=True,
-    use_container_width=True,
+    width="stretch",
     sort=False,
 )
 
@@ -150,6 +151,7 @@ st.subheader("🔥 Label Co-Occurrence")
 
 import ast
 from itertools import combinations
+
 import plotly.express as px
 
 # Sicherstellen, dass Labels Listen sind
@@ -195,11 +197,11 @@ fig.update_layout(
     xaxis_title="Label", yaxis_title="Label", xaxis_side="top", width=700, height=700
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 
-from sklearn.decomposition import PCA
 import plotly.express as px
+from sklearn.decomposition import PCA
 
 st.subheader("🌀 User Similarity Map (PCA)")
 
@@ -252,13 +254,14 @@ else:
         height=600,
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 # ---------------- AGREEMENT BETWEEN TWO LABELERS ----------------
 st.subheader("👥 Label Agreement")
 
 import ast
+
 import numpy as np
 import plotly.express as px
 
@@ -333,7 +336,7 @@ else:
         yaxis_title="Number of Images",
         bargap=0.1,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 # --- AWS URL Prefix ---
 AWS_URL = "https://d3b45akprxecp4.cloudfront.net/GTSD-220-test/"
